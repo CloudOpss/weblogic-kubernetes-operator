@@ -23,6 +23,7 @@ import io.kubernetes.client.openapi.models.V1EnvVar;
 import io.kubernetes.client.openapi.models.V1LocalObjectReference;
 import io.kubernetes.client.openapi.models.V1ObjectMeta;
 import io.kubernetes.client.openapi.models.V1PersistentVolumeClaimVolumeSource;
+import io.kubernetes.client.openapi.models.V1Pod;
 import io.kubernetes.client.openapi.models.V1SecretReference;
 import io.kubernetes.client.openapi.models.V1Volume;
 import io.kubernetes.client.openapi.models.V1VolumeMount;
@@ -73,8 +74,10 @@ import static oracle.weblogic.kubernetes.actions.TestActions.getNextIntrospectVe
 import static oracle.weblogic.kubernetes.actions.TestActions.getServiceNodePort;
 import static oracle.weblogic.kubernetes.actions.TestActions.getServicePort;
 import static oracle.weblogic.kubernetes.actions.TestActions.patchDomainResourceWithNewIntrospectVersion;
+import static oracle.weblogic.kubernetes.actions.TestActions.scaleCluster;
 import static oracle.weblogic.kubernetes.actions.TestActions.uninstallNginx;
 import static oracle.weblogic.kubernetes.actions.impl.Domain.patchDomainCustomResource;
+import static oracle.weblogic.kubernetes.actions.impl.Pod.getPod;
 import static oracle.weblogic.kubernetes.assertions.TestAssertions.adminNodePortAccessible;
 import static oracle.weblogic.kubernetes.assertions.TestAssertions.podStateNotChanged;
 import static oracle.weblogic.kubernetes.assertions.TestAssertions.verifyRollingRestartOccurred;
@@ -144,6 +147,8 @@ public class ItIntrospectVersion {
   private static Path clusterViewAppPath;
   private static LoggingFacade logger = null;
 
+  private static String introspectVersionValue = "0";
+
   /**
    * Assigns unique namespaces for operator and domains.
    * Pull WebLogic image if running tests in Kind cluster.
@@ -187,7 +192,6 @@ public class ItIntrospectVersion {
     clusterViewAppPath = Paths.get(distDir.toString(), "clusterview.war");
 
   }
-
 
   /**
    * Test domain status gets updated when introspectVersion attribute is added under domain.spec.
@@ -401,6 +405,7 @@ public class ItIntrospectVersion {
 
     // patch the domain to increase the replicas of the cluster and add introspectVersion field
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
+    introspectVersionValue = introspectVersion;
     String patchStr =
         "["
             + "{\"op\": \"replace\", \"path\": \"/spec/clusters/0/replicas\", \"value\": 3},"
@@ -482,6 +487,10 @@ public class ItIntrospectVersion {
     // verify each managed server can see other member in the cluster
     verifyServerCommunication(curlRequest, managedServerNames);
 
+    // verify when a domain resource has spec.introspectVersion configured,
+    // all WebLogic server pods will have a label "weblogic.introspectVersion"
+    // set to the value of spec.introspectVersion.
+    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
   }
 
   /**
@@ -602,6 +611,10 @@ public class ItIntrospectVersion {
 
     // verify each managed server can see other member in the cluster
     verifyServerCommunication(curlRequest, managedServerNames);
+
+    // verify when a domain/cluster is rolling restarted without changing the spec.introspectVersion,
+    // all server pods' weblogic.introspectVersion label stay unchanged after the pods are restarted.
+    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
   }
 
   /**
@@ -676,6 +689,7 @@ public class ItIntrospectVersion {
     deleteSecret(wlSecretName, introDomainNamespace);
 
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
+    introspectVersionValue = introspectVersion;
     String oldVersion = assertDoesNotThrow(()
         -> getDomainCustomResource(domainUid, introDomainNamespace).getSpec().getRestartVersion());
     int newVersion = oldVersion == null ? 1 : Integer.valueOf(oldVersion) + 1;
@@ -749,6 +763,9 @@ public class ItIntrospectVersion {
     //verify admin server accessibility and the health of cluster members
     verifyMemberHealth(adminServerPodName, managedServerNames, ADMIN_USERNAME_PATCH, ADMIN_PASSWORD_PATCH);
 
+    // verify when the spec.introspectVersion is changed,
+    // all running server pods' weblogic.introspectVersion label is updated to the new value.
+    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
   }
 
   /**
@@ -798,6 +815,7 @@ public class ItIntrospectVersion {
     executeWLSTScript(configScript, wlstPropertiesFile.toPath(), introDomainNamespace);
 
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
+    introspectVersionValue = introspectVersion;
 
     logger.info("patch the domain resource with new cluster and introspectVersion");
     String patchStr
@@ -921,7 +939,45 @@ public class ItIntrospectVersion {
 
     //verify admin server accessibility and the health of cluster members
     verifyMemberHealth(adminServerPodName, managedServerNames, ADMIN_USERNAME_PATCH, ADMIN_PASSWORD_PATCH);
+  }
 
+  /**
+   * Test that when a domain resource has spec.introspectVersion configured,
+   * after a cluster is scaled up, new server pods have the label "weblogic.introspectVersion" set as well.
+   */
+  @Test
+  @Order(6)
+  @DisplayName("Scale up cluster-1 in domain1Namespace and verify label weblogic.introspectVersion set")
+  public void testDedicatedModeSameNamespaceScale() {
+    final String adminServerName = "admin-server";
+    final String managedServerNameBase = "ms-";
+    final String adminServerPodName = domainUid + "-" + adminServerName;
+    String managedServerPodNamePrefix = domainUid + "-" + managedServerNameBase;
+
+    // scale up the domain by increasing replica count
+    int replicaCount = 3;
+    boolean scalingSuccess = assertDoesNotThrow(() ->
+        scaleCluster(domainUid, introDomainNamespace, "cluster-1", replicaCount),
+        String.format("Scaling the cluster cluster-1 of domain %s in namespace %s failed",
+            domainUid, introDomainNamespace));
+    assertTrue(scalingSuccess,
+        String.format("Cluster scaling failed for domain %s in namespace %s", domainUid, introDomainNamespace));
+
+    // check new server is started and existing servers are running
+    logger.info("Check admin service and pod {0} is created in namespace {1}",
+        adminServerPodName, introDomainNamespace);
+    checkPodReadyAndServiceExists(adminServerPodName, domainUid, introDomainNamespace);
+
+    // check managed server services and pods are ready
+    for (int i = 1; i <= replicaCount; i++) {
+      logger.info("Wait for managed server pod {0} to be ready in namespace {1}",
+          managedServerPodNamePrefix + i, introDomainNamespace);
+      checkPodReadyAndServiceExists(managedServerPodNamePrefix + i, domainUid, introDomainNamespace);
+    }
+
+    // verify when a domain resource has spec.introspectVersion configured,
+    // after a cluster is scaled up, new server pods have the label "weblogic.introspectVersion" set as well.
+    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
   }
 
   /**
@@ -996,6 +1052,41 @@ public class ItIntrospectVersion {
           }
           return health;
         });
+  }
+
+  private void verifyWebLogicVersioninPod(String introspectVersion, int replicaCount) {
+    final String adminServerName = "admin-server";
+    final String managedServerNameBase = "ms-";
+    final String adminServerPodName = domainUid + "-" + adminServerName;
+    String managedServerPodNamePrefix = domainUid + "-" + managedServerNameBase;
+
+    // verify admin server pods
+    logger.info("Verify weblogic.introspectVersion in admin server pod {0}", adminServerPodName);
+    verifyWebLogicVersionValue(adminServerPodName, introspectVersion);
+
+    // verify managed server pods
+    for (int i = 1; i <= replicaCount; i++) {
+      logger.info("Verify weblogic.introspectVersion in managed server pod {0}",
+          managedServerPodNamePrefix + i);
+      verifyWebLogicVersionValue(managedServerPodNamePrefix + i, introspectVersion);
+    }
+  }
+
+  private void verifyWebLogicVersionValue(String podName, String introspectVersion) {
+    final String wlsIntroVersion = "weblogic.introspectVersion";
+    V1Pod myPod = assertDoesNotThrow(() ->
+        getPod(introDomainNamespace, "", podName),
+        "Get pod " + podName);
+
+    Map<String, String> myLabels = myPod.getMetadata().getLabels();
+
+    for (Map.Entry<String, String> entry : myLabels.entrySet()) {
+      if (entry.getKey().equals(wlsIntroVersion)) {
+        System.out.println("Spec Key:value " + entry.getKey() + ":" + entry.getValue());
+        assertTrue(entry.getValue().equals(introspectVersion),
+            "Failed to set " + wlsIntroVersion + " to " + entry.getValue());
+      }
+    }
   }
 
   /**
