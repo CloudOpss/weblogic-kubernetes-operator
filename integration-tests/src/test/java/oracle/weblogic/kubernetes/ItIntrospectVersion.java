@@ -69,6 +69,7 @@ import static oracle.weblogic.kubernetes.TestConstants.WLS_UPDATE_IMAGE_TAG;
 import static oracle.weblogic.kubernetes.actions.ActionConstants.APP_DIR;
 import static oracle.weblogic.kubernetes.actions.ActionConstants.RESOURCE_DIR;
 import static oracle.weblogic.kubernetes.actions.TestActions.deleteSecret;
+import static oracle.weblogic.kubernetes.actions.TestActions.getCurrentIntrospectVersion;
 import static oracle.weblogic.kubernetes.actions.TestActions.getDomainCustomResource;
 import static oracle.weblogic.kubernetes.actions.TestActions.getNextIntrospectVersion;
 import static oracle.weblogic.kubernetes.actions.TestActions.getServiceNodePort;
@@ -146,8 +147,6 @@ public class ItIntrospectVersion {
 
   private static Path clusterViewAppPath;
   private static LoggingFacade logger = null;
-
-  private static String introspectVersionValue = "0";
 
   /**
    * Assigns unique namespaces for operator and domains.
@@ -403,9 +402,11 @@ public class ItIntrospectVersion {
     Path configScript = Paths.get(RESOURCE_DIR, "python-scripts", "introspect_version_script.py");
     executeWLSTScript(configScript, wlstPropertiesFile.toPath(), introDomainNamespace);
 
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+
     // patch the domain to increase the replicas of the cluster and add introspectVersion field
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
-    introspectVersionValue = introspectVersion;
     String patchStr =
         "["
             + "{\"op\": \"replace\", \"path\": \"/spec/clusters/0/replicas\", \"value\": 3},"
@@ -490,7 +491,7 @@ public class ItIntrospectVersion {
     // verify when a domain resource has spec.introspectVersion configured,
     // all WebLogic server pods will have a label "weblogic.introspectVersion"
     // set to the value of spec.introspectVersion.
-    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
+    verifyWebLogicVersioninPod(currIntrospectVersion, replicaCount);
   }
 
   /**
@@ -614,7 +615,9 @@ public class ItIntrospectVersion {
 
     // verify when a domain/cluster is rolling restarted without changing the spec.introspectVersion,
     // all server pods' weblogic.introspectVersion label stay unchanged after the pods are restarted.
-    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+    verifyWebLogicVersioninPod(currIntrospectVersion, replicaCount);
   }
 
   /**
@@ -689,7 +692,6 @@ public class ItIntrospectVersion {
     deleteSecret(wlSecretName, introDomainNamespace);
 
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
-    introspectVersionValue = introspectVersion;
     String oldVersion = assertDoesNotThrow(()
         -> getDomainCustomResource(domainUid, introDomainNamespace).getSpec().getRestartVersion());
     int newVersion = oldVersion == null ? 1 : Integer.valueOf(oldVersion) + 1;
@@ -765,7 +767,9 @@ public class ItIntrospectVersion {
 
     // verify when the spec.introspectVersion is changed,
     // all running server pods' weblogic.introspectVersion label is updated to the new value.
-    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+    verifyWebLogicVersioninPod(currIntrospectVersion, replicaCount);
   }
 
   /**
@@ -815,7 +819,6 @@ public class ItIntrospectVersion {
     executeWLSTScript(configScript, wlstPropertiesFile.toPath(), introDomainNamespace);
 
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
-    introspectVersionValue = introspectVersion;
 
     logger.info("patch the domain resource with new cluster and introspectVersion");
     String patchStr
@@ -857,7 +860,6 @@ public class ItIntrospectVersion {
 
     //verify admin server accessibility and the health of cluster members
     verifyMemberHealth(adminServerPodName, managedServerNames, ADMIN_USERNAME_PATCH, ADMIN_PASSWORD_PATCH);
-
   }
 
   /**
@@ -977,7 +979,9 @@ public class ItIntrospectVersion {
 
     // verify when a domain resource has spec.introspectVersion configured,
     // after a cluster is scaled up, new server pods have the label "weblogic.introspectVersion" set as well.
-    verifyWebLogicVersioninPod(introspectVersionValue, replicaCount);
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+    verifyWebLogicVersioninPod(currIntrospectVersion, replicaCount);
   }
 
   /**
