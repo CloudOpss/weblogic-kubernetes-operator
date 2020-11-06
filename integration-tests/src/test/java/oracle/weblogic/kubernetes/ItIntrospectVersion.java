@@ -402,11 +402,6 @@ public class ItIntrospectVersion {
     Path configScript = Paths.get(RESOURCE_DIR, "python-scripts", "introspect_version_script.py");
     executeWLSTScript(configScript, wlstPropertiesFile.toPath(), introDomainNamespace);
 
-    String currIntrospectVersion =
-        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
-
-    logger.info("======= currIntrospectVersion {0}", currIntrospectVersion);
-
     // patch the domain to increase the replicas of the cluster and add introspectVersion field
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
     logger.info("======= introspectVersion {0}", introspectVersion);
@@ -494,6 +489,10 @@ public class ItIntrospectVersion {
     // verify when a domain resource has spec.introspectVersion configured,
     // all WebLogic server pods will have a label "weblogic.introspectVersion"
     // set to the value of spec.introspectVersion.
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+
+    logger.info("======= currIntrospectVersion {0}", currIntrospectVersion);
     verifyWebLogicVersioninPod(currIntrospectVersion, replicaCount);
   }
 
@@ -1066,6 +1065,11 @@ public class ItIntrospectVersion {
     final String managedServerNameBase = "ms-";
     final String adminServerPodName = domainUid + "-" + adminServerName;
     String managedServerPodNamePrefix = domainUid + "-" + managedServerNameBase;
+
+    String currIntrospectVersion =
+        assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
+
+    logger.info("in verifyWebLogicVersioninPod ======= currIntrospectVersion {0}", currIntrospectVersion);
 
     // verify admin server pods
     logger.info("Verify weblogic.introspectVersion in admin server pod {0}", adminServerPodName);
