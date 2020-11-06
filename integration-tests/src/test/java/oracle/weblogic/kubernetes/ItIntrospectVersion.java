@@ -405,8 +405,11 @@ public class ItIntrospectVersion {
     String currIntrospectVersion =
         assertDoesNotThrow(() -> getCurrentIntrospectVersion(domainUid, introDomainNamespace));
 
+    logger.info("======= currIntrospectVersion {0}", currIntrospectVersion);
+
     // patch the domain to increase the replicas of the cluster and add introspectVersion field
     String introspectVersion = assertDoesNotThrow(() -> getNextIntrospectVersion(domainUid, introDomainNamespace));
+    logger.info("======= introspectVersion {0}", introspectVersion);
     String patchStr =
         "["
             + "{\"op\": \"replace\", \"path\": \"/spec/clusters/0/replicas\", \"value\": 3},"
