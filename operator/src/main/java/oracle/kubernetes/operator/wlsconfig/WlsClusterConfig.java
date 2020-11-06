@@ -245,6 +245,27 @@ public class WlsClusterConfig {
     return result;
   }
 
+  /**
+   * Returns the configuration for the WLS server with the given name.
+   *
+   * @param serverName name of the WLS server
+   * @return The WlsServerConfig object containing configuration of the WLS server with the given
+   *     name. This methods return null if no WLS configuration is found for the given server name.
+   */
+  public WlsServerConfig getServerConfig(String serverName) {
+    WlsServerConfig result = null;
+    List<WlsServerConfig> wlsServerConfigs = getServerConfigs();
+    if (serverName != null && wlsServerConfigs != null) {
+      for (WlsServerConfig serverConfig : wlsServerConfigs) {
+        if (serverConfig.getName().equals(serverName)) {
+          result = serverConfig;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
   public List<WlsServerConfig> getServers() {
     return this.servers;
   }

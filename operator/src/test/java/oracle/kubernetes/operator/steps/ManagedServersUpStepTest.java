@@ -24,8 +24,10 @@ import oracle.kubernetes.operator.helpers.DomainPresenceInfo;
 import oracle.kubernetes.operator.helpers.DomainPresenceInfo.ServerStartupInfo;
 import oracle.kubernetes.operator.helpers.LegalNames;
 import oracle.kubernetes.operator.helpers.PodHelper;
+import oracle.kubernetes.operator.steps.ManagedServersUpStep.ServerConfig;
 import oracle.kubernetes.operator.steps.ManagedServersUpStep.ServersUpStepFactory;
 import oracle.kubernetes.operator.utils.WlsDomainConfigSupport;
+import oracle.kubernetes.operator.wlsconfig.WlsClusterConfig;
 import oracle.kubernetes.operator.wlsconfig.WlsDomainConfig;
 import oracle.kubernetes.operator.wlsconfig.WlsServerConfig;
 import oracle.kubernetes.operator.work.FiberTestSupport;
@@ -93,14 +95,31 @@ public class ManagedServersUpStepTest {
     domainPresenceInfo.setServerPod(serverName, createPod(serverName));
   }
 
+  private static void addServer(DomainPresenceInfo domainPresenceInfo, String serverName,
+      String clusterName) {
+    domainPresenceInfo.setServerPod(serverName, createPod(serverName, clusterName));
+  }
+
   private static V1Pod createPod(String serverName) {
     return new V1Pod().metadata(withNames(new V1ObjectMeta().namespace(NS), serverName));
+  }
+
+  private static V1Pod createPod(String serverName, String clusterName) {
+    return new V1Pod().metadata(withNames(new V1ObjectMeta().namespace(NS), serverName, clusterName));
   }
 
   private static V1ObjectMeta withNames(V1ObjectMeta objectMeta, String serverName) {
     return objectMeta
         .name(LegalNames.toPodName(UID, serverName))
         .putLabelsItem(LabelConstants.SERVERNAME_LABEL, serverName);
+  }
+
+  private static V1ObjectMeta withNames(V1ObjectMeta objectMeta, String serverName,
+      String clusterName) {
+    return objectMeta
+        .name(LegalNames.toPodName(UID, serverName))
+        .putLabelsItem(LabelConstants.SERVERNAME_LABEL, serverName)
+        .putLabelsItem(LabelConstants.CLUSTERNAME_LABEL, clusterName);
   }
 
   private DomainPresenceInfo createDomainPresenceInfo() {
@@ -600,6 +619,55 @@ public class ManagedServersUpStepTest {
     invokeStepWithoutDomainTopology();
 
     assertServersWillNotBeStarted();
+  }
+
+  @Test
+  public void whenServerInPendingList_addToFactoryAndRemoveFromPendingList() {
+    // WebLogic Dynamic Domain configuration support
+    configSupport.withDynamicWlsCluster("cluster-1", "ms1", "ms2");
+    WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
+    WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
+    WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
+
+    // Setup DomainPresenceInfo
+    DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
+    addServer(domainPresenceInfo, "ms1", "cluster-1");
+    addServer(domainPresenceInfo, "ms2", "cluster-1");
+
+    // Add ms2 as running pod
+    List<ServerConfig> pendingServers = new ArrayList<>();
+    ServerConfig ms2ServerConfig = new ServerConfig(wlsClusterConfig, wlsServerConfig);
+    pendingServers.add(ms2ServerConfig);
+
+    ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
+
+    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+
+    assertThat(pendingServers, empty());
+    assertThat(serversUpStepFactory.getStartupInfos().size(), equalTo(1));
+  }
+
+  @Test
+  public void whenPendingListEmpty_noStartupInfoAdded() {
+    // WebLogic Dynamic Domain configuration support
+    configSupport.withDynamicWlsCluster("cluster-1", "ms1", "ms2");
+    WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
+    WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
+    WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
+
+    // Setup DomainPresenceInfo
+    DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
+    addServer(domainPresenceInfo, "ms1", "cluster-1");
+    addServer(domainPresenceInfo, "ms2", "cluster-1");
+
+    // Add ms2 as running pod
+    List<ServerConfig> pendingServers = new ArrayList<>();
+
+    ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
+
+    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+
+    assertThat(serversUpStepFactory.getStartupInfos(), nullValue());
   }
 
   private static Step skipProgressingStep(Step step) {

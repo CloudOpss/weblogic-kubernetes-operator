@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -105,7 +106,7 @@ public class ManagedServersUpStep extends Step {
       LOGGER.fine(SERVERS_UP_MSG, factory.domain.getDomainUid(), getRunningServers(info));
     }
 
-    Optional.ofNullable(config).ifPresent(wlsDomainConfig -> addServersToFactory(factory, wlsDomainConfig));
+    Optional.ofNullable(config).ifPresent(wlsDomainConfig -> addServersToFactory(factory, wlsDomainConfig, info));
 
     info.setServerStartupInfo(factory.getStartupInfos());
     info.setServerShutdownInfo(factory.getShutdownInfos());
@@ -117,21 +118,64 @@ public class ManagedServersUpStep extends Step {
         packet);
   }
 
-  private void addServersToFactory(@Nonnull ServersUpStepFactory factory, @Nonnull WlsDomainConfig wlsDomainConfig) {
+  private void addServersToFactory(@Nonnull ServersUpStepFactory factory,
+      @Nonnull WlsDomainConfig wlsDomainConfig,
+      DomainPresenceInfo domainPresenceInfo) {
     Set<String> clusteredServers = new HashSet<>();
 
     List<ServerConfig> pendingServers = new ArrayList<>();
+    // Handle clustered servers with serverStartPolicy of 'Always'
     wlsDomainConfig.getClusterConfigs().values()
         .forEach(wlsClusterConfig -> addClusteredServersToFactory(
             factory, clusteredServers, wlsClusterConfig, pendingServers));
 
+    // Handle standalone servers with serverStartPolicy of 'Always'
     wlsDomainConfig.getServerConfigs().values().stream()
         .filter(wlsServerConfig -> !clusteredServers.contains(wlsServerConfig.getName()))
         .forEach(wlsServerConfig -> factory.addServerIfAlways(wlsServerConfig, null, pendingServers));
 
+    // Process and give currently running servers priority for meeting cluster replica counts to avoid
+    // unnecessary stopping and starting of servers.
+    processRunningClusteredServers(factory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+
     for (ServerConfig serverConfig : pendingServers) {
       factory.addServerIfNeeded(serverConfig.wlsServerConfig, serverConfig.wlsClusterConfig);
     }
+  }
+
+  void processRunningClusteredServers(@Nonnull ServersUpStepFactory factory,
+      @Nonnull WlsDomainConfig wlsDomainConfig,
+      DomainPresenceInfo domainPresenceInfo, List<ServerConfig> pendingServers) {
+    wlsDomainConfig.getClusterConfigs().values().forEach(wlsClusterConfig -> {
+      Collection<String> runningServerNames =
+          domainPresenceInfo.getRunningServerPodNamesInCluster(wlsClusterConfig.getClusterName());
+      runningServerNames.forEach(serverName ->
+          Optional.ofNullable(wlsClusterConfig.getServerConfig(serverName))
+              .ifPresent(wlsServerConfig -> addServerToFactoryAndRemoveFromPendingList(factory,
+                  pendingServers, wlsClusterConfig, wlsServerConfig)));
+    });
+  }
+
+  private void addServerToFactoryAndRemoveFromPendingList(
+      @Nonnull ServersUpStepFactory factory, List<ServerConfig> pendingServers,
+      WlsClusterConfig wlsClusterConfig, WlsServerConfig wlsServerConfig) {
+    // If in pending list then process server and remove from pending list
+    if (removeFromPendingServers(wlsServerConfig, pendingServers) != null) {
+      factory.addServerIfNeeded(wlsServerConfig, wlsClusterConfig);
+    }
+  }
+
+  private ServerConfig removeFromPendingServers(WlsServerConfig wlsServerConfig,
+      List<ServerConfig> pendingServers) {
+    Iterator<ServerConfig> itr = pendingServers.iterator();
+    while (itr.hasNext()) {
+      ServerConfig serverConfig = itr.next();
+      if (serverConfig.wlsServerConfig.equals(wlsServerConfig)) {
+        itr.remove();
+        return serverConfig;
+      }
+    }
+    return  null;
   }
 
   private void addClusteredServersToFactory(
@@ -337,7 +381,7 @@ public class ManagedServersUpStep extends Step {
 
   }
 
-  private static class ServerConfig {
+  static class ServerConfig {
     protected WlsServerConfig wlsServerConfig;
     protected WlsClusterConfig wlsClusterConfig;
 

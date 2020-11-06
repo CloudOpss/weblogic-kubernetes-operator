@@ -561,11 +561,11 @@ class ItServerStartPolicy {
     patchServerStartPolicy(
          "/spec/managedServers/3/serverStartPolicy", "IF_NEEDED");
 
-    // Make sure config-cluster-server2 is deleted 
-    checkPodDeleted(serverPodName2, domainUid, domainNamespace);
+    // Make sure config-cluster-server2 was not re-started
+    checkPodReadyAndServiceExists(serverPodName2, domainUid, domainNamespace);
 
-    // Make sure config-cluster-server1 is re-started
-    checkPodReadyAndServiceExists(serverPodName, domainUid, domainNamespace);
+    // Make sure config-cluster-server1 is not re-started
+    checkPodDeleted(serverPodName, domainUid, domainNamespace);
   }
 
   /**

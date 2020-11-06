@@ -3,6 +3,8 @@
 
 package oracle.kubernetes.operator.helpers;
 
+import java.util.Collection;
+
 import io.kubernetes.client.openapi.models.V1ObjectMeta;
 import io.kubernetes.client.openapi.models.V1Pod;
 import io.kubernetes.client.openapi.models.V1PodCondition;
@@ -12,9 +14,11 @@ import io.kubernetes.client.openapi.models.V1Service;
 import org.junit.Test;
 
 import static oracle.kubernetes.operator.LabelConstants.CLUSTERNAME_LABEL;
+import static oracle.kubernetes.operator.LabelConstants.SERVERNAME_LABEL;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.CoreMatchers.sameInstance;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.junit.MatcherAssert.assertThat;
 
@@ -104,7 +108,9 @@ public class DomainPresenceInfoTest {
   }
 
   private V1Pod createServerInCluster(String podName, String clusterName) {
-    return new V1Pod().metadata(new V1ObjectMeta().name(podName).putLabelsItem(CLUSTERNAME_LABEL, clusterName));
+    return new V1Pod().metadata(new V1ObjectMeta().name(podName)
+        .putLabelsItem(CLUSTERNAME_LABEL, clusterName)
+        .putLabelsItem(SERVERNAME_LABEL, podName));
   }
 
   private void addReadyServer(String serverName, String clusterName) {
@@ -131,6 +137,20 @@ public class DomainPresenceInfoTest {
     assertThat(info.getNumScheduledServers("cluster1"), equalTo(2L));
     assertThat(info.getNumScheduledServers("cluster2"), equalTo(2L));
     assertThat(info.getNumScheduledServers(null), equalTo(1L));
+  }
+
+  @Test
+  public void getRunningServersInCluster() {
+    addServer("MS1", "cluster1");
+    addServer("MS2", "cluster1");
+    addServer("MS3", "cluster2");
+    addServer("MS4", "cluster2");
+    addServer("MS5", null);
+    addServer("MS6", null);
+
+    Collection<String> servers = info.getRunningServerPodNamesInCluster("cluster1");
+    assertThat(servers.size(), equalTo(2));
+    assertThat(servers, contains("MS1", "MS2"));
   }
 
   private void addScheduledServer(String serverName, String clusterName) {

@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -33,6 +34,7 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import static java.lang.System.lineSeparator;
+import static oracle.kubernetes.operator.helpers.PodHelper.hasClusterName;
 import static oracle.kubernetes.operator.helpers.PodHelper.hasClusterNameOrNull;
 
 /**
@@ -121,6 +123,19 @@ public class DomainPresenceInfo {
           .map(AtomicReference::get)
           .filter(this::isNotDeletingPod)
           .filter(p -> hasClusterNameOrNull(p, clusterName));
+  }
+
+  public Collection<String> getRunningServerPodNamesInCluster(String clusterName) {
+    return getRunningServerPodsInCluster(clusterName).map(PodHelper::getPodServerName).collect(Collectors.toList());
+  }
+
+  @Nonnull
+  private Stream<V1Pod> getRunningServerPodsInCluster(String clusterName) {
+    return getServers().values().stream()
+        .map(ServerKubernetesObjects::getPod)
+        .map(AtomicReference::get)
+        .filter(this::isNotDeletingPod)
+        .filter(p -> hasClusterName(p, clusterName));
   }
 
   boolean isNotDeletingPod(@Nullable V1Pod pod) {
