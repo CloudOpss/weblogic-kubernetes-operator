@@ -381,6 +381,7 @@ public class ManagedServersUpStep extends Step {
 
   }
 
+  // package-private for unit test access
   static class ServerConfig {
     protected WlsServerConfig wlsServerConfig;
     protected WlsClusterConfig wlsClusterConfig;

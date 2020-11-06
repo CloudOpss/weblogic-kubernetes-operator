@@ -634,7 +634,7 @@ public class ManagedServersUpStepTest {
     addServer(domainPresenceInfo, "ms1", "cluster-1");
     addServer(domainPresenceInfo, "ms2", "cluster-1");
 
-    // Add ms2 as running pod
+    // Add ms2 to pending list to process
     List<ServerConfig> pendingServers = new ArrayList<>();
     ServerConfig ms2ServerConfig = new ServerConfig(wlsClusterConfig, wlsServerConfig);
     pendingServers.add(ms2ServerConfig);
@@ -652,21 +652,71 @@ public class ManagedServersUpStepTest {
     // WebLogic Dynamic Domain configuration support
     configSupport.withDynamicWlsCluster("cluster-1", "ms1", "ms2");
     WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
-    WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
-    WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
 
     // Setup DomainPresenceInfo
     DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
     addServer(domainPresenceInfo, "ms1", "cluster-1");
     addServer(domainPresenceInfo, "ms2", "cluster-1");
 
-    // Add ms2 as running pod
+    // Empty pending list
     List<ServerConfig> pendingServers = new ArrayList<>();
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
 
     step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
+    assertThat(serversUpStepFactory.getStartupInfos(), nullValue());
+  }
+
+  @Test
+  public void whenNoClusterDefined_noStartupInfoAdded() {
+    // Add standalone ms1 and ms2
+    configSupport.addWlsServer("ms1");
+    configSupport.addWlsServer("ms2");
+    WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
+    WlsServerConfig wlsServerConfig = wlsDomainConfig.getServerConfig("ms2");
+
+    // Setup DomainPresenceInfo
+    DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
+    addServer(domainPresenceInfo, "ms1");
+    addServer(domainPresenceInfo, "ms2");
+
+    // Add ms2 to pending list to process
+    List<ServerConfig> pendingServers = new ArrayList<>();
+    ServerConfig ms2ServerConfig = new ServerConfig(null, wlsServerConfig);
+    pendingServers.add(ms2ServerConfig);
+
+    ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
+
+    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+
+    assertThat(pendingServers.size(), equalTo(1));
+    assertThat(pendingServers, hasItem(ms2ServerConfig));
+    assertThat(serversUpStepFactory.getStartupInfos(), nullValue());
+  }
+
+  @Test
+  public void whenNoRunningServers_noStartupInfoAdded() {
+    // WebLogic Dynamic Domain configuration support
+    configSupport.withDynamicWlsCluster("cluster-1", "ms1", "ms2");
+    WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
+    WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
+    WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
+
+    // Setup DomainPresenceInfo
+    DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
+
+    // Add ms2 to pending server list to process
+    List<ServerConfig> pendingServers = new ArrayList<>();
+    ServerConfig ms2ServerConfig = new ServerConfig(wlsClusterConfig, wlsServerConfig);
+    pendingServers.add(ms2ServerConfig);
+
+    ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
+
+    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+
+    assertThat(pendingServers.size(), equalTo(1));
+    assertThat(pendingServers, hasItem(ms2ServerConfig));
     assertThat(serversUpStepFactory.getStartupInfos(), nullValue());
   }
 
