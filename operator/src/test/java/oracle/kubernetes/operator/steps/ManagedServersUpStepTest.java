@@ -629,12 +629,12 @@ public class ManagedServersUpStepTest {
     WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
     WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
 
-    // Setup DomainPresenceInfo
+    // Setup DomainPresenceInfo and add running servers to cluster
     DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
     addServer(domainPresenceInfo, "ms1", "cluster-1");
     addServer(domainPresenceInfo, "ms2", "cluster-1");
 
-    // Add ms2 to pending list to process
+    // Add ms2 to pending servers list to process
     List<ServerConfig> pendingServers = new ArrayList<>();
     ServerConfig ms2ServerConfig = new ServerConfig(wlsClusterConfig, wlsServerConfig);
     pendingServers.add(ms2ServerConfig);
@@ -654,12 +654,12 @@ public class ManagedServersUpStepTest {
     configSupport.withDynamicWlsCluster("cluster-1", "ms1", "ms2");
     WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
 
-    // Setup DomainPresenceInfo
+    // Setup DomainPresenceInfo and add running servers to cluster
     DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
     addServer(domainPresenceInfo, "ms1", "cluster-1");
     addServer(domainPresenceInfo, "ms2", "cluster-1");
 
-    // Empty pending list
+    // Empty pending list so no servers should be processed
     List<ServerConfig> pendingServers = new ArrayList<>();
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
@@ -672,13 +672,13 @@ public class ManagedServersUpStepTest {
 
   @Test
   public void whenNoClusterDefined_noStartupInfoAdded() {
-    // Add standalone ms1 and ms2
+    // Do not define a cluster in Domain and create standalone servers ms1 and ms2
     configSupport.addWlsServer("ms1");
     configSupport.addWlsServer("ms2");
     WlsDomainConfig wlsDomainConfig = configSupport.createDomainConfig();
     WlsServerConfig wlsServerConfig = wlsDomainConfig.getServerConfig("ms2");
 
-    // Setup DomainPresenceInfo
+    // Setup DomainPresenceInfo with standalone servers
     DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
     addServer(domainPresenceInfo, "ms1");
     addServer(domainPresenceInfo, "ms2");
@@ -706,7 +706,7 @@ public class ManagedServersUpStepTest {
     WlsClusterConfig wlsClusterConfig = wlsDomainConfig.getClusterConfig("cluster-1");
     WlsServerConfig wlsServerConfig = wlsClusterConfig.getServerConfig("ms2");
 
-    // Setup DomainPresenceInfo
+    // Setup DomainPresenceInfo with no running servers
     DomainPresenceInfo domainPresenceInfo = createDomainPresenceInfo();
 
     // Add ms2 to pending server list to process
