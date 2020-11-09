@@ -641,7 +641,8 @@ public class ManagedServersUpStepTest {
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
 
-    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+    step.addRunningServersToFactoryForAllClustersInDomain(
+        serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
     assertThat(pendingServers, empty());
     assertThat(serversUpStepFactory.getStartupInfos().size(), equalTo(1));
@@ -663,7 +664,8 @@ public class ManagedServersUpStepTest {
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
 
-    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+    step.addRunningServersToFactoryForAllClustersInDomain(
+        serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
     assertThat(serversUpStepFactory.getStartupInfos(), nullValue());
   }
@@ -688,7 +690,8 @@ public class ManagedServersUpStepTest {
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
 
-    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+    step.addRunningServersToFactoryForAllClustersInDomain(
+        serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
     assertThat(pendingServers.size(), equalTo(1));
     assertThat(pendingServers, hasItem(ms2ServerConfig));
@@ -713,7 +716,8 @@ public class ManagedServersUpStepTest {
 
     ServersUpStepFactory serversUpStepFactory = new ServersUpStepFactory(wlsDomainConfig, domain);
 
-    step.processRunningClusteredServers(serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+    step.addRunningServersToFactoryForAllClustersInDomain(
+        serversUpStepFactory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
     assertThat(pendingServers.size(), equalTo(1));
     assertThat(pendingServers, hasItem(ms2ServerConfig));

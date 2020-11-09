@@ -134,32 +134,42 @@ public class ManagedServersUpStep extends Step {
         .filter(wlsServerConfig -> !clusteredServers.contains(wlsServerConfig.getName()))
         .forEach(wlsServerConfig -> factory.addServerIfAlways(wlsServerConfig, null, pendingServers));
 
-    // Process and give currently running servers priority for meeting cluster replica counts to avoid
-    // unnecessary stopping and starting of servers.
-    processRunningClusteredServers(factory, wlsDomainConfig, domainPresenceInfo, pendingServers);
+    // Process and add currently running servers to factory, to satisfy replica counts, before any
+    // configured non-running servers in order to avoid unnecessary stopping and starting of
+    // running servers.
+    addRunningServersToFactoryForAllClustersInDomain(factory, wlsDomainConfig, domainPresenceInfo, pendingServers);
 
     for (ServerConfig serverConfig : pendingServers) {
       factory.addServerIfNeeded(serverConfig.wlsServerConfig, serverConfig.wlsClusterConfig);
     }
   }
 
-  void processRunningClusteredServers(@Nonnull ServersUpStepFactory factory,
+  void addRunningServersToFactoryForAllClustersInDomain(@Nonnull ServersUpStepFactory factory,
       @Nonnull WlsDomainConfig wlsDomainConfig,
       DomainPresenceInfo domainPresenceInfo, List<ServerConfig> pendingServers) {
     wlsDomainConfig.getClusterConfigs().values().forEach(wlsClusterConfig -> {
+      // Get list of running server names for the cluster
       Collection<String> runningServerNames =
           domainPresenceInfo.getRunningServerPodNamesInCluster(wlsClusterConfig.getClusterName());
-      runningServerNames.forEach(serverName ->
-          Optional.ofNullable(wlsClusterConfig.getServerConfig(serverName))
-              .ifPresent(wlsServerConfig -> addServerToFactoryAndRemoveFromPendingList(factory,
-                  pendingServers, wlsClusterConfig, wlsServerConfig)));
+      // Add clustered running servers to the factory
+      addRunningServersInClusterToFactory(factory, runningServerNames, wlsClusterConfig, pendingServers);
     });
   }
 
-  private void addServerToFactoryAndRemoveFromPendingList(
+  private void addRunningServersInClusterToFactory(@Nonnull ServersUpStepFactory factory,
+      Collection<String> runningServerNames, WlsClusterConfig wlsClusterConfig,
+      List<ServerConfig> pendingServers) {
+    runningServerNames.forEach(serverName ->
+        Optional.ofNullable(wlsClusterConfig.getServerConfig(serverName))
+            .ifPresent(wlsServerConfig -> addClusteredRunningServerIfNeeded(factory,
+                pendingServers, wlsClusterConfig, wlsServerConfig)));
+  }
+
+  private void addClusteredRunningServerIfNeeded(
       @Nonnull ServersUpStepFactory factory, List<ServerConfig> pendingServers,
       WlsClusterConfig wlsClusterConfig, WlsServerConfig wlsServerConfig) {
-    // If in pending list then process server and remove from pending list
+    // pendingServers list contains servers that have not been evaluated to be added
+    // to the factory.
     if (removeFromPendingServers(wlsServerConfig, pendingServers) != null) {
       factory.addServerIfNeeded(wlsServerConfig, wlsClusterConfig);
     }
